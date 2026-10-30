@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dinosaur T-Rex Game</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#fff;color:#53565a;font-family:Arial,Helvetica,sans-serif}
+body{padding:34px 22px 60px}.page{width:min(100%,1050px);margin:auto}
+.intro{display:flex;justify-content:center;align-items:center;gap:22px;text-align:center;max-width:700px;margin:0 auto 22px}
+.mini-scene{display:flex;align-items:end;gap:9px;color:#53565a;flex-shrink:0}.mini-dino{width:27px;height:34px;image-rendering:pixelated}
+.intro h1{font-size:20px;font-weight:500;margin:0 0 9px}.intro p{font-size:12px;line-height:1.65;color:#85898d;margin:0}
+.game-area{position:relative;margin:0 auto;width:100%;max-width:900px;height:350px;display:flex;align-items:center}
+canvas{width:100%;height:auto;display:block;touch-action:manipulation;image-rendering:pixelated}
+.scorebar{position:absolute;right:25px;top:18px;display:flex;gap:18px;font:700 16px monospace;color:#777;letter-spacing:1px}
+.scorebar span{white-space:nowrap}
+.overlay{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;pointer-events:none}
+.msg{margin-top:-22px;font:700 16px monospace;letter-spacing:2px;color:#777}
+.restart{display:none;position:absolute;top:53%;left:50%;transform:translate(-50%,-50%);border:0;background:transparent;color:#777;font-size:32px;cursor:pointer;pointer-events:auto}
+.restart:hover{color:#333}
+.controls{display:flex;justify-content:center;align-items:center;gap:20px;margin:0 auto 32px;font-size:12px;color:#888;flex-wrap:wrap}
+.controls label{display:flex;align-items:center;gap:5px}.controls input{accent-color:#777}
+.leaderboard{width:min(100%,420px);margin:0 auto 25px;padding:22px 28px;background:#fff;border:1px solid #f0f0f0;box-shadow:0 8px 30px #00000008}
+.leaderboard h2{text-align:center;font-size:12px;font-weight:500;color:#777;margin:0 0 17px}
+.score-list{list-style:none;margin:0;padding:0}.score-list li{display:flex;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #f5f5f5;font-size:12px;color:#777}
+.score-list li:last-child{border:0}.score-list b{font-weight:500;color:#555}
+.leader-note{text-align:center;color:#aaa;font-size:11px;margin:14px 0 0}
+.champions{width:min(100%,420px);margin:0 auto;text-align:center;padding:20px;border-top:1px solid #f2f2f2;color:#999;font-size:12px}
+.champions h3{font-weight:500;font-size:12px;margin:0 0 15px}.trophy{font-size:22px;margin-bottom:5px}
+@media(max-width:650px){body{padding:24px 10px}.intro{gap:10px}.intro p{font-size:11px}.game-area{height:auto;min-height:220px}.scorebar{right:12px;top:12px;font-size:12px}.controls{gap:12px}}
+</style>
+</head>
+<body>
+<main class="page">
+<header class="intro">
+ <div class="mini-scene" aria-hidden="true">
+  <svg class="mini-dino" viewBox="0 0 44 52"><g fill="currentColor"><path d="M7 19h5V9h5V4h19v5h4v18h-8v7h-6v8h-6v-8h-5v-7H7z"/><path d="M8 27H2v-6h7zM18 40h6v9h-6zM31 34h6v15h-6z"/></g><rect x="31" y="11" width="3" height="3" fill="white"/></svg>
+  <svg width="48" height="38" viewBox="0 0 48 38"><g fill="currentColor"><path d="M17 37V5h5v32zM9 18h8v4H9zM9 18v12h4V18zM22 23h8v4h-8zM26 23v10h4V23z"/></g></svg>
+ </div>
+ <div><h1>Dinosaur T-Rex Game</h1><p>Press the space bar to start the game. Use the up and down arrow keys to control the dinosaur. Jump over the cacti and avoid the flying birds. Try to score the maximum points!</p></div>
+</header>
+<section class="game-area">
+ <canvas id="game" width="900" height="230" tabindex="0" aria-label="Dinosaur T-Rex runner game"></canvas>
+ <div class="scorebar"><span>HI <b id="hi">00000</b></span><span id="score">00000</span></div>
+ <div class="overlay"><div class="msg" id="message">PRESS SPACE TO START</div><button class="restart" id="restart" aria-label="Restart">↻</button></div>
+</section>
+<div class="controls">
+ <span>SPACE / ↑ jump</span><span>↓ duck</span><span>Tap to jump</span>
+ <label><input type="checkbox" id="auto"> Autopilot</label><label><input type="checkbox" id="sound" checked> Sound</label>
+</div>
+<section class="leaderboard"><h2>TOP SCORES — THIS DEVICE</h2><ol class="score-list" id="scores"><li><span>No runs yet</span><b>—</b></li></ol><p class="leader-note">Your best scores are saved locally in this browser.</p></section>
+<section class="champions"><h3>YESTERDAY'S CHAMPIONS</h3><div class="trophy">🏆</div><div>Keep playing to set a new personal record!</div></section>
+</main>
+<script>
+(()=>{
+const c=document.getElementById('game'),x=c.getContext('2d'),$=id=>document.getElementById(id);
+const W=900,H=230,G=184,DX=75;
+let state='ready',score=0,best=+(localStorage.getItem('trex-best')||0),records=JSON.parse(localStorage.getItem('trex-records')||'[]');
+let speed=6,frame=0,last=0,raf=0,y=0,vy=0,duck=false,ground=0,obs=[],clouds=[{x:140,y:38},{x:440,y:58},{x:730,y:30}],night=false,audio;
+function pad(n){return String(Math.floor(n)).padStart(5,'0')}
+function sound(f=500,d=.06){if(!$('sound').checked)return;try{audio??=new(window.AudioContext||window.webkitAudioContext)();let o=audio.createOscillator(),g=audio.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(.02,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+d);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+d)}catch{}}
+function scores(){let a=[...records].sort((a,b)=>b-a).slice(0,7);$('scores').innerHTML=a.length?a.map((v,i)=>'<li><span>'+(i+1)+'. Personal best '+(i+1)+'</span><b>'+pad(v)+'</b></li>').join(''):'<li><span>No runs yet</span><b>—</b></li>'}
+function reset(){cancelAnimationFrame(raf);state='ready';score=0;speed=6;frame=0;y=0;vy=0;duck=false;ground=0;obs=[];night=false;clouds=[{x:140,y:38},{x:440,y:58},{x:730,y:30}];$('score').textContent='00000';$('hi').textContent=pad(best);$('message').textContent='PRESS SPACE TO START';$('message').style.display='block';$('restart').style.display='none';draw()}
+function begin(){if(state==='running')return;if(state==='over')reset();state='running';$('message').style.display='none';$('restart').style.display='none';last=performance.now();raf=requestAnimationFrame(loop)}
+function jump(){if(state==='ready'){begin();return}if(state!=='running'||y>0||duck)return;vy=10.6;sound(650)}
+function setDuck(v){duck=!!v&&state==='running'&&y===0}
+function dinoBox(){return{x:DX+4,y:G-(duck?25:43)-y,w:duck?50:37,h:duck?22:39}}
+function spawn(){let r=Math.random(),type=score>400&&r>.79?'bird':r>.75?'triple':r>.5?'double':'single';obs.push({x:W+20,type,phase:Math.random()*6})}
+function box(o){return o.type==='bird'?{x:o.x+5,y:G-70+Math.sin(frame*.12+o.phase)*2,w:39,h:18}:{x:o.x+2,y:G-(o.type==='triple'?44:39),w:o.type==='triple'?52:o.type==='double'?36:19,h:o.type==='triple'?44:39}}
+function collide(a,b){return a.x+6<b.x+b.w-4&&a.x+a.w-5>b.x+4&&a.y+5<b.y+b.h-3&&a.y+a.h-3>b.y+2}
+function update(){
+ frame++;score+=.13;speed=Math.min(14,speed+.0008);ground=(ground+speed)%34;
+ if(y>0||vy>0){y=Math.max(0,y+vy);vy-=.56;if(y===0)vy=0}
+ obs.forEach(o=>o.x-=speed);obs=obs.filter(o=>o.x>-80);
+ let lastO=obs[obs.length-1];if(!lastO||lastO.x<W-Math.max(275,420-speed*8))spawn();
+ clouds.forEach(a=>{a.x-=speed*.22;if(a.x<-55){a.x=W+20;a.y=25+Math.random()*48}});
+ if(score>300&&Math.floor(score/300)%2===1)night=true;else night=false;
+ if($('auto').checked){let n=obs.find(o=>o.x>DX-4&&o.x<DX+170);if(n){let dist=n.x-DX;if(n.type==='bird'&&dist<110&&dist>0&&y===0)setDuck(true);else if(n.type!=='bird'&&dist<Math.max(105,speed*9)&&dist>0&&y===0){setDuck(false);jump()}if(duck&&(n.type!=='bird'||dist< -25))setDuck(false)}}
+ const p=dinoBox();for(let o of obs)if(collide(p,box(o))){finish();return}
+ $('score').textContent=pad(score)
+}
+function cactus(px,type){x.save();x.translate(px,G);x.fillStyle=ink();function plant(a,h){x.fillRect(a,-h,8,h);x.fillRect(a-7,-h+13,7,5);x.fillRect(a-7,-h+13,4,13);x.fillRect(a+8,-h+21,7,5);x.fillRect(a+11,-h+21,4,12)}plant(0,39);if(type!=='single')plant(20,35);if(type==='triple')plant(40,42);x.restore()}
+function ink(){return night?'#f7f7f7':'#53565a'}
+function bird(o){let q=box(o);x.save();x.translate(o.x,q.y);x.fillStyle=ink();x.fillRect(9,7,27,10);x.fillRect(33,3,10,9);x.fillRect(40,6,7,4);x.fillRect(3,10,9,4);if(Math.sin(frame*.38+o.phase)>0)x.fillRect(14,0,20,5);else x.fillRect(14,17,20,5);x.fillStyle=night?'#202124':'#fff';x.fillRect(39,5,2,2);x.restore()}
+function drawDino(){x.save();x.translate(DX,G-(duck?34:43)-y);x.fillStyle=ink();if(duck){x.fillRect(0,12,43,17);x.fillRect(34,4,17,15);x.fillRect(47,8,7,4);x.fillRect(8,27,8,5);x.fillRect(34,27,8,5)}else{
+ // recognizable T-Rex silhouette built from crisp pixel blocks
+ x.fillRect(13,0,24,7);x.fillRect(7,6,36,22);x.fillRect(0,17,15,13);x.fillRect(35,3,13,7);x.fillRect(23,25,10,9);x.fillRect(9,29,10,8);x.fillRect(8,36,8,8);x.fillRect(29,34,8,10);x.fillRect(4,11,7,5);x.fillRect(25,20,9,5);
+ x.fillStyle=night?'#202124':'#fff';x.fillRect(33,8,4,4);
+ }x.restore()}
+function draw(){
+ x.fillStyle=night?'#202124':'#fff';x.fillRect(0,0,W,H);x.fillStyle=night?'#eee':'#e5e5e5';clouds.forEach(a=>{x.fillRect(a.x,a.y,40,3);x.fillRect(a.x+8,a.y-5,20,5)});
+ if(night){x.fillStyle='#f7f7f7';x.beginPath();x.arc(760,42,10,0,7);x.fill()}
+ x.strokeStyle=ink();x.lineWidth=1.5;x.beginPath();x.moveTo(0,G);x.lineTo(W,G);x.stroke();x.fillStyle=ink();for(let a=-ground;a<W;a+=34)x.fillRect(a,G+8,14,2);
+ obs.forEach(o=>o.type==='bird'?bird(o):cactus(o.x,o.type));drawDino()
+}
+function finish(){state='over';$('message').textContent='G A M E  O V E R';$('message').style.display='block';$('restart').style.display='block';let s=Math.floor(score);if(s>0){records.push(s);records=[...records].sort((a,b)=>b-a).slice(0,7);localStorage.setItem('trex-records',JSON.stringify(records))}if(s>best){best=s;localStorage.setItem('trex-best',best);$('hi').textContent=pad(best)}scores();sound(130,.18);draw()}
+function loop(t){if(state!=='running')return;let dt=Math.min(40,t-last);last=t;loop.acc=(loop.acc||0)+dt;while(loop.acc>=1000/60&&state==='running'){loop.acc-=1000/60;update()}draw();if(state==='running')raf=requestAnimationFrame(loop);else loop.acc=0}
+$('restart').onclick=()=>{reset();begin()};
+$('auto').onchange=()=>{if(!$('auto').checked)setDuck(false)};
+c.addEventListener('pointerdown',()=>{c.focus();if(state!=='running')begin();jump()});
+document.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();if(e.repeat)return;if(e.code==='Space'||e.code==='ArrowUp'){if(state!=='running')begin();jump()}if(e.code==='ArrowDown')setDuck(true);if(e.code==='Enter'&&state!=='running'){if(state==='over')reset();begin()}});
+document.addEventListener('keyup',e=>{if(e.code==='ArrowDown')setDuck(false)});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='running'){state='paused';cancelAnimationFrame(raf);$('message').textContent='PAUSED';$('message').style.display='block'}else if(!document.hidden&&state==='paused'){state='running';$('message').style.display='none';last=performance.now();raf=requestAnimationFrame(loop)}});
+scores();reset();
+})();
+</script>
+</body></html>
